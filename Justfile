@@ -31,4 +31,4 @@ lint-nix:
 # go mod tidy
 tidy:
   #!/usr/bin/env bash
-  go mod tidy
+  go mod tidy --go=1.20.0 --compat=1.20.0
