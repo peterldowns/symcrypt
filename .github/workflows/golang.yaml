@@ -1,0 +1,71 @@
+name: golang
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+jobs:
+  test:
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: password
+          # TODO: unable to turn off fsync easily, see
+          # https://github.com/orgs/community/discussions/26688#discussioncomment-3252882
+          # and
+          # https://github.com/actions/runner/discussions/1872
+        ports:
+          - 5433:5432
+        # Use a temporary directory for data by passing --mount to the `docker`
+        # command; could also attempt to use the volumes: github serrvice
+        # option.
+        options: >-
+          --mount type=tmpfs,destination=/var/lib/postgresql/data
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: setup-go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.22
+          cache: true
+          cache-dependency-path: go.sum
+      - name: test all
+        run: go test ./...
+      - name: test all -race
+        run: go test -race ./...
+  lint:
+    # https://github.com/golangci/golangci-lint-action?tab=readme-ov-file#annotations
+    permissions:
+      contents: read # read the repo
+      pull-requests: read # allows the 'only-new-issues' option to work
+      checks: write # annotate code in the PR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: setup-go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.22
+          cache: true
+          cache-dependency-path: go.sum
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v5
+        with:
+          install-mode: "binary"
+          version: "v1.63.4"
+          # https://github.com/golangci/golangci-lint-action/issues/244
+          # https://github.com/Kong/mesh-perf/pull/168
+          # https://github.com/golangci/golangci-lint-action/issues/552#issuecomment-1413509544
+          args: --timeout 10m
+          skip-cache: true
+      - name: go mod tidy
+        run: go mod tidy
+      - name: check for any changes
+        run: |
+          [[ $(git status --porcelain) == "" ]] || (echo "changes detected" && exit 1)
